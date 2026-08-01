@@ -6,7 +6,9 @@ import android.content.pm.PackageManager
 import android.os.Bundle
 import android.util.Log
 import android.widget.Button
+import android.widget.EditText
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
@@ -39,6 +41,7 @@ class MainActivity : AppCompatActivity() {
         val btnOpenMap = findViewById<Button>(R.id.btn_open_map)
         val btnCheckUpdate = findViewById<Button>(R.id.btn_check_update)
         val btnSynthesize = findViewById<Button>(R.id.btn_synthesize)
+        val btnEngineSettings = findViewById<Button>(R.id.btn_engine_settings)
 
         btnStartWorker.setOnClickListener {
             requestPermissionsIfNeeded()
@@ -67,6 +70,22 @@ class MainActivity : AppCompatActivity() {
                     Log.e(TAG, "update check error: ${e.message}")
                 }
             }
+        }
+
+        btnEngineSettings.setOnClickListener {
+            val prefs = getSharedPreferences("disaster_prefs", MODE_PRIVATE)
+            val current = prefs.getString("voicevox_host", "http://127.0.0.1:50021")
+            val edit = EditText(this).apply { setText(current) }
+            AlertDialog.Builder(this)
+                .setTitle("VOICEVOX エンジンのホスト")
+                .setMessage("例: http://192.168.1.50:50021 または http://127.0.0.1:50021")
+                .setView(edit)
+                .setPositiveButton("保存") { _, _ ->
+                    prefs.edit().putString("voicevox_host", edit.text.toString().trim()).apply()
+                    Toast.makeText(this, "保存しました", Toast.LENGTH_SHORT).show()
+                }
+                .setNegativeButton("キャンセル", null)
+                .show()
         }
 
         btnSynthesize.setOnClickListener {
