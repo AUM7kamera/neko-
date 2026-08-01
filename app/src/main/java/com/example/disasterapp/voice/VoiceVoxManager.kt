@@ -5,44 +5,34 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
-import android.os.FileUtils
 import android.provider.MediaStore
 import android.util.Log
 import androidx.core.content.FileProvider
 import com.example.disasterapp.network.RetrofitClient
-import com.example.disasterapp.network.GitHubApiService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.ResponseBody
-import retrofit2.HttpException
 import retrofit2.Response
-import retrofit2.Retrofit
 import java.io.File
-import java.io.FileOutputStream
-import java.io.InputStream
 import java.net.Socket
-import java.util.concurrent.TimeUnit
+import java.net.URI
 
 /**
  * VoiceVoxManager
- * - Downloads VOICEVOX official binary for arm64-v8a from a GitHub Releases URL (auto-detected)
- * - Extracts / makes executable and starts it via ProcessBuilder
- * - Polls localhost:50021 for readiness
- * - Provides textToWav(context, text, filename) to synthesize via /audio_query and /synthesis
- * - Saves WAV to MediaStore Download/VOICEVOX and exposes share intent
- *
- * Notes:
- * - This implementation focuses on arm64-v8a and assumes a Linux/Android-compatible release asset is available.
- * - Network and disk operations run on Dispatchers.IO.
+ * - Attempts to use a local VOICEVOX engine binary placed under filesDir/voicevox/<name>
+ *   where <name> is chosen based on Build.SUPPORTED_ABIS (voicevox_arm64, voicevox_armeabi_v7a,
+ *   voicevox_x86_64, voicevox_x86).
+ * - If a local engine is not available or not listening, falls back to a user-configured host URL
+ *   stored in SharedPreferences (key: "voicevox_host").
+ * - Synthesizes via /audio_query and /synthesis and saves WAV to MediaStore Downloads.
  */
 class VoiceVoxManager(private val context: Context) {
     companion object {
         private const val TAG = "VoiceVoxManager"
         private const val VOICEVOX_PORT = 50021
         private const val VOICEVOX_DIR = "voicevox"
-        private const val LOCALHOST = "127.0.0.1"
         private const val STARTUP_TIMEOUT_MS = 30_000L
     }
 
@@ -53,35 +43,78 @@ class VoiceVoxManager(private val context: Context) {
         if (!filesDir.exists()) filesDir.mkdirs()
     }
 
-    suspend fun ensureEngineStarted(): Boolean = withContext(Dispatchers.IO) {
-        if (isPortOpen(LOCALHOST, VOICEVOX_PORT)) {
-            Log.i(TAG, "VOICEVOX already listening on port $VOICEVOX_PORT")
-            return@withContext true
+    private fun getPreferredBinaryName(): String {
+        val abi = Build.SUPPORTED_ABIS.firstOrNull() ?: ""
+        return when {
+            abi.startsWith("arm64") -> "voicevox_arm64"
+            abi.startsWith("armeabi") -> "voicevox_armeabi_v7a"
+            abi.contains("x86_64") -> "voicevox_x86_64"
+            abi.contains("x86") -> "voicevox_x86"
+            else -> "voicevox_arm64"
         }
+    }
 
+    private fun getConfiguredHostUrl(): String {
+        val prefs = context.getSharedPreferences("disaster_prefs", Context.MODE_PRIVATE)
+        val host = prefs.getString("voicevox_host", null)
+        return host?.trim()?.takeIf { it.isNotEmpty() } ?: "http://127.0.0.1:$VOICEVOX_PORT"
+    }
+
+    suspend fun ensureEngineStarted(): Boolean = withContext(Dispatchers.IO) {
         try {
-            // Attempt to find a GitHub release asset automatically for VOICEVOX
-            // For simplicity, we will attempt a common release URL pattern: https://github.com/VOICEVOX/voicevox/releases/latest
-            val retrofit = RetrofitClient.create("https://api.github.com/")
-            val api = retrofit.create(GitHubApiService::class.java)
+            // First, check configured host (may be localhost or remote)
+            val configuredHostUrl = getConfiguredHostUrl()
+            val (cfgHost, cfgPort) = parseHostPort(configuredHostUrl)
+            if (isPortOpen(cfgHost, cfgPort)) {
+                Log.i(TAG, "VOICEVOX listening at configured host $cfgHost:$cfgPort")
+                return@withContext true
+            }
 
-            // This is a best-effort approach; if it fails we'll fall back to expecting the user to provide binary.
-            // We will not parse GitHub assets here (would need GitHub API structures), so instead look for prebundled binary name.
-            // For now, assume the binary is already not present and fail gracefully.
-
-            // Try local bundled binary names
-            val candidate = File(filesDir, "voicevox_arm64")
+            // Try local binary candidate based on ABI
+            val candidateName = getPreferredBinaryName()
+            val candidate = File(filesDir, candidateName)
             if (candidate.exists()) {
                 candidate.setExecutable(true)
                 startLocalBinary(candidate)
-                return@withContext waitForStartup(STARTUP_TIMEOUT_MS)
+                if (waitForStartup(STARTUP_TIMEOUT_MS)) {
+                    Log.i(TAG, "VOICEVOX started from local binary: ${candidate.absolutePath}")
+                    return@withContext true
+                }
             }
 
-            Log.w(TAG, "No automatic release download implemented for security reasons; please install VOICEVOX engine manually or place binary at ${candidate.absolutePath}")
+            // If candidate not present or failed to start, also try plain 'voicevox' filename as fallback
+            val fallback = File(filesDir, "voicevox")
+            if (fallback.exists()) {
+                fallback.setExecutable(true)
+                startLocalBinary(fallback)
+                if (waitForStartup(STARTUP_TIMEOUT_MS)) {
+                    Log.i(TAG, "VOICEVOX started from fallback binary: ${fallback.absolutePath}")
+                    return@withContext true
+                }
+            }
+
+            // Final attempt: re-check configured host
+            if (isPortOpen(cfgHost, cfgPort)) {
+                Log.i(TAG, "VOICEVOX available at configured host after attempts $cfgHost:$cfgPort")
+                return@withContext true
+            }
+
+            Log.w(TAG, "No VOICEVOX engine available (tried configured host and local binaries). Configured host: $configuredHostUrl, candidate: ${candidate.absolutePath}")
             return@withContext false
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to start VOICEVOX engine: ${e.message}", e)
+            Log.e(TAG, "Failed to ensure VOICEVOX started: ${e.message}", e)
             return@withContext false
+        }
+    }
+
+    private fun parseHostPort(urlString: String): Pair<String, Int> {
+        return try {
+            val uri = URI(urlString)
+            val host = uri.host ?: "127.0.0.1"
+            val port = if (uri.port == -1) VOICEVOX_PORT else uri.port
+            Pair(host, port)
+        } catch (e: Exception) {
+            Pair("127.0.0.1", VOICEVOX_PORT)
         }
     }
 
@@ -107,8 +140,9 @@ class VoiceVoxManager(private val context: Context) {
 
     private suspend fun waitForStartup(timeoutMs: Long): Boolean = withContext(Dispatchers.IO) {
         val start = System.currentTimeMillis()
+        val (host, port) = parseHostPort(getConfiguredHostUrl())
         while (System.currentTimeMillis() - start < timeoutMs) {
-            if (isPortOpen(LOCALHOST, VOICEVOX_PORT)) return@withContext true
+            if (isPortOpen(host, port)) return@withContext true
             kotlinx.coroutines.delay(500)
         }
         return@withContext false
@@ -119,19 +153,20 @@ class VoiceVoxManager(private val context: Context) {
      */
     suspend fun synthesizeToWavAndSave(text: String, filename: String = "voicevox_output.wav"): Uri? = withContext(Dispatchers.IO) {
         try {
-            // Ensure engine is up
+            // Ensure engine is up (either local or configured host)
             val started = ensureEngineStarted()
             if (!started) {
                 Log.e(TAG, "VOICEVOX engine not started")
                 return@withContext null
             }
 
-            // Build simple HTTP calls using OkHttp via RetrofitClient
-            val retrofit = RetrofitClient.create("http://$LOCALHOST:$VOICEVOX_PORT/")
+            // Build Retrofit using configured host URL
+            val baseUrl = getConfiguredHostUrl().let { if (!it.endsWith("/")) "$it/" else it }
+            val retrofit = RetrofitClient.create(baseUrl)
             val apiService = retrofit.create(VoiceVoxApi::class.java)
 
             // 1) /audio_query
-            val audioQueryResp = apiService.audioQuery(text = text, speaker = 1)
+            val audioQueryResp: Response<ResponseBody> = apiService.audioQuery(text = text, speaker = 1)
             if (!audioQueryResp.isSuccessful) {
                 Log.e(TAG, "audio_query failed: ${audioQueryResp.code()}")
                 return@withContext null
@@ -140,7 +175,7 @@ class VoiceVoxManager(private val context: Context) {
 
             // 2) /synthesis
             val requestBody = audioQueryJson.toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull())
-            val synthesisResp = apiService.synthesis(speaker = 1, body = requestBody)
+            val synthesisResp: Response<ResponseBody> = apiService.synthesis(speaker = 1, body = requestBody)
             if (!synthesisResp.isSuccessful) {
                 Log.e(TAG, "synthesis failed: ${synthesisResp.code()}")
                 return@withContext null
