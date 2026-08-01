@@ -8,12 +8,16 @@
     <!-- For Android 13+ notifications -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- Allow Chromebook (non-touch) devices to install/run the app -->
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+
     <application
         android:allowBackup="true"
         android:label="@string/app_name"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
-        android:supportsRtl="true">
+        android:supportsRtl="true"
+        android:resizeableActivity="true">
 
         <meta-data
             android:name="com.google.android.geo.API_KEY"
