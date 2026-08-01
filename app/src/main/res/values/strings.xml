@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">災害支援アプリ（開発版）</string>
+    <string name="start_worker">ワーカー開始（定期チェック）</string>
+    <string name="stop_worker">ワーカー停止</string>
+    <string name="open_map">地図を開く</string>
+    <string name="check_update">アップデート確認 (version.json)</string>
+    <string name="synthesize">音声合成（VOICEVOX）</string>
+    <string name="voicevox_notice">注意: VOICEVOX エンジンは手動で端末上に用意してください。README を参照。</string>
+</resources>
