@@ -40,6 +40,13 @@
         android:layout_marginTop="8dp" />
 
     <Button
+        android:id="@+id/btn_engine_settings"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="VOICEVOX エンジン設定"
+        android:layout_marginTop="8dp" />
+
+    <Button
         android:id="@+id/btn_synthesize"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
