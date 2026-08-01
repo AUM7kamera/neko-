@@ -50,7 +50,9 @@ Termux を使う場合は、Termux のファイル領域へバイナリを置き
 
 VoiceVoxManager のデフォルト探索場所:
 
-- アプリの filesDir 配下の `voicevox/voicevox_arm64` を探します。ここに実行可能バイナリを置けば、アプリから起動を試みます。
+- アプリの filesDir 配下の `voicevox/` フォルダに、ABI に合ったバイナリ名（例: `voicevox_arm64`, `voicevox_armeabi_v7a`, `voicevox_x86_64`, `voicevox_x86`）を置くと、アプリが自動で候補を探して起動を試みます。ファイル名 `voicevox` でも試行します。
+
+- 端末上にバイナリを置けない場合は、LAN 上の VOICEVOX サーバを用意してアプリの「VOICEVOX エンジン設定」でホスト URL を指定してください（例: `http://192.168.1.10:50021`）。
 
 動作確認:
 
@@ -58,6 +60,14 @@ VoiceVoxManager のデフォルト探索場所:
 2. アプリを起動 → "音声合成（VOICEVOX）" ボタンを押すと合成が行われ、Downloads に WAV が保存され、共有インテントが開きます。
 
 注意: ネイティブバイナリの実行は端末依存（権限や SELinux ポリシー等）です。うまく動かない場合は Termux 上でエンジンを立てる方法を推奨します。
+
+---
+
+## Chromebook / タブレット向けの注意
+
+- ChromeOS の多くは x86_64 アーキテクチャを採用しているため、端末上でネイティブバイナリを実行する場合は `voicevox_x86_64` 等の対応バイナリを用意してください。
+- Termux が使える Chromebook では Termux にバイナリを置いて起動する方法が現実的です。
+- Chromebook 上でバイナリを実行できない場合は、LAN 上の VOICEVOX サーバを用意してアプリの設定でホスト URL を指定して利用してください。
 
 ---
 
@@ -81,18 +91,6 @@ AppUpdater は指定した `version.json` を取得し、`versionCode` が現在
 
 ---
 
-## ワーカー（WeatherCheckWorker）のテスト
-
-- アプリの MainActivity で "ワーカー開始（定期チェック）" を押すと、15 分間隔で WorkManager に登録されます（デバッグ時は OneTimeWorkRequest を使うか、Worker の doWork を呼ぶ単体テストを利用してください）。
-
----
-
-## Google Maps
-
-- Maps API キーは AndroidManifest に入れています（開発用）。動作しない場合は API キーの有効性、Google Play services、API 制限（パッケージ名＋SHA-1）を確認してください。
-
----
-
 ## ビルド & 実行（短い手順）
 
 1. Android Studio でプロジェクトを開く。
@@ -100,6 +98,16 @@ AppUpdater は指定した `version.json` を取得し、`versionCode` が現在
 3. アプリを起動し、ランタイム権限（位置情報、通知など）を許可する。
 4. 必要に応じて VOICEVOX エンジンを端末上で起動しておく。
 5. MainActivity の各ボタンで機能を確認する（ワーカー登録、地図、合成、アップデート確認）。
+
+
+### ローカルでのテスト用ビルド
+
+- テスト用に universal APK を生成する（app/build.gradle に `splits.abi.universalApk true` を設定済み）:
+  ./gradlew :app:assembleRelease
+  生成物: app/build/outputs/apk/release/app-release(-universal).apk
+
+- Play 配布は Android App Bundle (AAB) を推奨:
+  ./gradlew :app:bundleRelease
 
 ---
 
