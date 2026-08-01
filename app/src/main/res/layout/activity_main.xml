@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="vertical"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:padding="16dp">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="災害支援アプリ（開発版）"
+        android:textSize="18sp"
+        android:layout_marginBottom="12dp" />
+
+    <Button
+        android:id="@+id/btn_start_worker"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="ワーカー開始（定期チェック）" />
+
+    <Button
+        android:id="@+id/btn_stop_worker"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="ワーカー停止"
+        android:layout_marginTop="8dp" />
+
+    <Button
+        android:id="@+id/btn_open_map"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="地図を開く"
+        android:layout_marginTop="8dp" />
+
+    <Button
+        android:id="@+id/btn_check_update"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="アップデート確認 (version.json)"
+        android:layout_marginTop="8dp" />
+
+    <Button
+        android:id="@+id/btn_synthesize"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="音声合成（VOICEVOX）"
+        android:layout_marginTop="8dp" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="注意: VOICEVOX エンジンは手動で端末上に用意してください。README を参照。"
+        android:layout_marginTop="16dp"
+        android:textSize="12sp" />
+
+</LinearLayout>
